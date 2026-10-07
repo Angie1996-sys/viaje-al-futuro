@@ -131,6 +131,23 @@ th{ color:var(--muted); font-weight:500; }
 <div id="noJs" style="background:#ff5c8a;color:#fff;padding:12px 16px;font:600 15px Rubik,system-ui,sans-serif;text-align:center">
   ⚠️ Esta vista no está ejecutando el juego. Descarga el archivo y ábrelo con doble clic en Microsoft Edge o Google Chrome (o desde su dirección publicada).
 </div>
+<div id="jsErr" style="display:none;background:#ffb23f;color:#0a1229;padding:12px 16px;font:600 15px Rubik,system-ui,sans-serif;text-align:center;white-space:pre-line"></div>
+<script>
+/* Diagnóstico: quita el aviso de "sin JavaScript" y muestra cualquier error del juego */
+(function(){
+  var n=document.getElementById("noJs"); if(n) n.parentNode.removeChild(n);
+  window.addEventListener("error",function(e){
+    if(!e || !e.message) return;
+    var b=document.getElementById("jsErr"); if(!b) return;
+    var linea=e.lineno?(" (línea "+e.lineno+" del archivo)"):"";
+    var pista=/Unexpected|SyntaxError|Invalid or unexpected|missing|unterminated|Unterminated/i.test(e.message)
+      ? "\nRevisa la configuración que editaste en el Bloc de notas: cada URL debe ir entre comillas rectas, por ejemplo  const WEBHOOK_URL = \"https://...\";  y no debe borrarse ninguna comilla ni punto y coma."
+      : "";
+    b.textContent="⚠️ El juego encontró un error: "+e.message+linea+pista;
+    b.style.display="block";
+  });
+})();
+</script>
 <div class="wrap">
   <header>
     <h1>Viaje al Futuro<small id="subTitle">Viaja de noviembre 2026 a 2030 respondiendo sobre Copilot</small></h1>
@@ -284,21 +301,19 @@ th{ color:var(--muted); font-weight:500; }
 </div>
 
 <script>
-try{ document.getElementById("noJs").remove(); }catch(e){}
 /* =====================================================================
    CONFIGURACIÓN
    ===================================================================== */
 // ENVÍO AUTOMÁTICO (recomendado): URL del flujo de Teams «Cuando se recibe una solicitud de webhook de Teams».
 // El flujo agrega cada resultado como una fila en tu Excel, sin que el participante haga nada más.
 const WEBHOOK_URL = "https://default83447055f5c742a29fb7faad727f2f.b4.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/08/workflows/7a98ff87c6654781be68a8cad8acf9b0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=oAEyTMdIV9KBEBxDmLZ745vIOMF5y8mH6Wi0WVSyp0s";
-const RANKING_URL = "https://annardiagnosticaimports-my.sharepoint.com/:x:/g/personal/angie_perez_annardx_com/IQAT8zPcZA9jQ76OYSjS1vgbAQJZmPtx2ZE0A2rwRP1iNsw?e=er4ORO";
 // Alternativa manual: vínculo previamente rellenado de Microsoft Forms (ver guía). Debe contener los textos
 // PARTICIPANTE, AREA, SESION, PUNTAJE, CORRECTAS, TOTAL, CODIGO y DETALLE como valores de ejemplo;
 // el juego los reemplaza por los datos reales de cada partida. No requiere licencias Premium.
 const FORMS_URL = "";
 // Enlace del libro de Excel (en la web) que recibe las respuestas del formulario y tiene la hoja «Ranking».
 // Se abre desde el panel de la facilitadora para ver los resultados en tiempo real.
-const RANKING_URL = "";
+const RANKING_URL = "https://annardiagnosticaimports-my.sharepoint.com/:x:/g/personal/angie_perez_annardx_com/IQAT8zPcZA9jQ76OYSjS1vgbAQJZmPtx2ZE0A2rwRP1iNsw?e=er4ORO";
 // MODO OPCIONAL (requiere aprobación del administrador; déjalo vacío si no la tienes). Con CLIENT_ID y TENANT_ID llenos, cada participante
 // inicia sesión con su cuenta corporativa y su resultado se guarda al instante en una lista de SharePoint.
 // Usa Microsoft Graph (incluido en Microsoft 365): no requiere Power Automate ni licencias Premium.
