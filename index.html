@@ -923,9 +923,19 @@ function resultPayload(nombre,area,ses,p,c,t,detalle){
   return {letra:LETRA,fecha:new Date().toISOString(),sesion:ses||"Sin sesión",participante:nombre,area:area||"-",puntaje:p,correctas:c,total:t,codigo:codeFor(nombre,area,ses,p,c,t),detalle:detalle||"-"};
 }
 async function postWebhook(data){
-  // Un solo envío: el flujo lo recibe aunque el navegador no pueda leer la respuesta (evita filas duplicadas).
-  await fetch(WEBHOOK_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(data)});
-  return "sent";
+  const body=JSON.stringify(data);
+  let r;
+  try{
+    // 1) JSON normal: si el flujo permite CORS, el juego recibe la confirmación.
+    r=await fetch(WEBHOOK_URL,{method:"POST",headers:{"Content-Type":"application/json"},body});
+  }catch(e){
+    // 2) El navegador bloqueó la verificación previa (CORS): esa petición NO se envió, así que se envía una sola vez como texto.
+    await fetch(WEBHOOK_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body});
+    return "sent";
+  }
+  if(r.ok) return "ok:"+r.status;
+  let det=""; try{ det=(await r.text()).slice(0,180); }catch(e){}
+  const err=new Error("El flujo respondió HTTP "+r.status+(det?" · "+det:"")); err.http=r.status; throw err;
 }
 async function sendResult(){
   clearInterval(topTimer);
@@ -933,7 +943,7 @@ async function sendResult(){
     $("regBox").hidden=true; $("endSaved").textContent="Enviando tu resultado…";
     const data=resultPayload(player.name,player.area,SESION,S.score,S.correct,qOrder.length,encodeDetail(S.detail));
     let ok=false;
-    for(let i=0;i<3 && !ok;i++){ try{ await postWebhook(data); ok=true; }catch(e){ await new Promise(r=>setTimeout(r,1500)); } }
+    for(let i=0;i<3 && !ok;i++){ try{ await postWebhook(data); ok=true; }catch(e){ if(e.http) break; await new Promise(r=>setTimeout(r,1500)); } }
     $("endSaved").textContent= ok ? "✓ Tu resultado se envió automáticamente al registro." : "⚠️ No se pudo enviar (revisa tu conexión). Toma captura de esta pantalla.";
     return;
   }
@@ -1059,8 +1069,8 @@ $("btnTest").onclick=async()=>{
     $("saveMsg").textContent="Enviando un resultado de prueba…";
     const ses=$("inSesion").value.trim()||"Prueba";
     try{ const r=await postWebhook(resultPayload("Prueba Facilitador","TIC",ses,999,9,10,"1:1 2:0"));
-      $("saveMsg").textContent="✓ Resultado de prueba enviado."+" Revisa que aparezca la fila «Prueba Facilitador» en tu Excel (y el historial de ejecuciones del flujo)."; }
-    catch(e){ $("saveMsg").textContent="⚠️ No se pudo enviar: "+e.message; }
+      $("saveMsg").textContent=(String(r).startsWith("ok")?"✓ El flujo confirmó la recepción ("+r.slice(3)+").":"✓ Resultado de prueba enviado (el flujo no permite leer su respuesta).")+" Revisa que aparezca la fila «Prueba Facilitador» en tu Excel (y el historial de ejecuciones del flujo)."; }
+    catch(e){ $("saveMsg").textContent="⚠️ "+e.message+(e.http?". Revisa en Power Automate que el flujo esté activado y que la URL del disparador sea la misma del juego.":". Revisa la conexión a internet."); }
     return;
   }
   if(LIVE){
@@ -1136,7 +1146,7 @@ $("inXlsx").onchange=async e=>{
 };
 function buildReport(){
   const s=$("selSesion").value; const seen=new Set();
-  const rows=allRows.filter(r=>!s||String(r.sesion)===s).filter(r=>{ const k=[r.rid,r.codigo,r.fecha,r.nombre].join("|"); if(seen.has(k)) return false; seen.add(k); return true; });
+  const rows=allRows.filter(r=>!s||String(r.sesion)===s).filter(r=>{ const k=[r.codigo,r.fecha,r.nombre].join("|"); if(seen.has(k)) return false; seen.add(k); return true; });
   const by={};
   for(const r of rows){ const k=r.correo?String(r.correo).toLowerCase():(String(r.nombre).trim().toLowerCase())+"|"+String(r.area).trim().toLowerCase();
     const sc=Number(r.puntaje)||0, co=Number(r.correctas)||0, to=Number(r.total)||0;
