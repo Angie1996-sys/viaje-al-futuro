@@ -171,7 +171,7 @@ th{ color:var(--muted); font-weight:500; }
       <div class="card">
         <h2>Prepara tu máquina del tiempo</h2>
         <p id="sessionTag" class="small"></p>
-        <p>Conduce el Cronomóvil de noviembre de 2026 hasta 2030. Recoge celdas azules seguidas para subir el combo, esquiva las fallas rojas (¡algunas cambian de carril!), atrapa las letras de COPILOT y los poderes: 🛡️ escudo, 🧲 imán y ⚡ turbo. En cada portal responde una pregunta para avanzar en el tiempo.</p>
+        <p>Conduce el Cronomóvil de noviembre de 2026 hasta 2030. Recoge celdas azules seguidas para subir el combo, esquiva las paredes de bloqueo (¡las que tienen ⇅ cambian de carril!), atrapa las letras de COPILOT y los poderes: 🛡️ escudo, 🧲 imán y ⚡ turbo. En cada portal responde una pregunta para avanzar en el tiempo.</p>
         <div id="msBox" hidden>
           <button class="btn" id="btnLogin">Iniciar sesión con Microsoft</button>
           <p class="small" id="msInfo">Usa tu cuenta corporativa de ANNAR para que tu resultado quede registrado.</p>
@@ -252,6 +252,8 @@ th{ color:var(--muted); font-weight:500; }
       <p class="small">Ponle un nombre a cada sesión (por ejemplo, el área o la fecha). El QR lleva ese nombre y así el informe separa los resultados de cada grupo.</p>
       <label for="inSesion">Nombre de la sesión</label>
       <input id="inSesion" maxlength="50" placeholder="Ej. Comercial 15-oct">
+      <label for="inLetra">Letra de la sesión (los Id del Excel serán A1, A2… para la letra A; B1, B2… para la B)</label>
+      <input id="inLetra" maxlength="2" placeholder="A" style="max-width:90px;text-transform:uppercase">
       <div class="row"><button class="btn" id="btnMakeQR">Generar QR</button></div>
       <div class="note" style="margin-top:14px">
         <b>Autorizar un nuevo intento</b><br>
@@ -373,6 +375,7 @@ function hashCode(s){ let h=2166136261; for(const ch of s){ h^=ch.charCodeAt(0);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const lerpCol=(a,b,t)=>{ const p=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)); const x=p(a),y=p(b); return "rgb("+x.map((v,i)=>Math.round(v+(y[i]-v)*t)).join(",")+")"; };
 const LS = { get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }, del(k){ try{ localStorage.removeItem(k); }catch(e){} } };
+const LETRA = (()=>{ const v=(new URLSearchParams(location.search).get("l")||"").trim().toUpperCase().replace(/[^A-Z]/g,"").slice(0,2); return v||"A"; })();
 const SESION = (()=>{ const q=new URLSearchParams(location.search); let v=q.get("sesion");
   if(!v && q.get("code")){ try{ v=new URLSearchParams(JSON.parse(sessionStorage.getItem("vaf_pkce")||"{}").search||"").get("sesion"); }catch(e){} }
   return (v||"").trim().slice(0,50); })();
@@ -495,8 +498,8 @@ function collect(it,cx){
   } else if(it.type==="glitch"){
     if(S.hitT>0) return;
     if(S.shield>0){ S.shield=0; burst(it.x,it.y,"#bff6ff",30,320); floaters.push({x:cx,y:S.y-34,txt:"¡Escudo!",col:"#bff6ff",life:1.2}); SFX.shield(); updateHud(); return; }
-    damage(); S.hitT=.8; shake=.5; burst(it.x,it.y,"#ff5c8a",28,300);
-    floaters.push({x:it.x,y:it.y-20,txt:"−1 energía",col:"#ff5c8a",life:1}); SFX.hit(); updateHud();
+    damage(); S.hitT=.8; shake=.6; burst(it.x,it.y,"#ff3d5e",26,320); burst(it.x,it.y,"#ffd23f",16,260); burst(it.x,it.y,"#c9d3ea",10,200); S.flash=Math.max(S.flash,.18);
+    floaters.push({x:it.x,y:it.y-20,txt:"¡Bloqueo! −1 energía",col:"#ff5c8a",life:1}); SFX.hit(); updateHud();
   } else if(it.type==="power"){
     const names={shield:"🛡️ ¡Escudo activado!",magnet:"🧲 ¡Imán de celdas!",turbo:"⚡ ¡Turbo: puntos x2!"};
     if(it.kind==="shield") S.shield=1; else S[it.kind]=7; if(it.kind==="turbo") S.boost=Math.max(S.boost,0.8);
@@ -605,7 +608,45 @@ function drawCar(x,y,t,boost,tilt=0){
   if(boost>0.2 || Math.sin(t*3)>0.97){ ctx.strokeStyle="rgba(190,245,255,.9)"; ctx.lineWidth=1.5; for(let k=0;k<2;k++){ ctx.beginPath(); let px=-58,py=-30+k*48; ctx.moveTo(px,py); for(let s=0;s<7;s++){ px+=18; py+=rnd(-8,8); ctx.lineTo(px,py);} ctx.stroke(); } }
   ctx.restore();
 }
+/* Pared de bloqueo: campo de fuerza entre dos pilones, con franjas de peligro, arcos eléctricos y chispas */
+function drawWall(it,t){
+  const g=laneY(1)-laneY(0), hh=g*0.44, x=it.x, y=it.y, w=16, ph=9;
+  const flick=0.75+0.25*Math.sin(t*23+it.x*0.1)*Math.sin(t*7);
+  ctx.save();
+  // halo
+  const halo=ctx.createRadialGradient(x,y,4,x,y,hh*1.25); halo.addColorStop(0,`rgba(255,70,90,${0.32*flick})`); halo.addColorStop(1,"rgba(255,70,90,0)");
+  ctx.fillStyle=halo; ctx.fillRect(x-hh*1.3,y-hh*1.3,hh*2.6,hh*2.6);
+  // barrera
+  const bar=ctx.createLinearGradient(x-w/2,0,x+w/2,0);
+  bar.addColorStop(0,`rgba(255,40,80,${0.25*flick})`); bar.addColorStop(0.5,`rgba(255,120,90,${0.85*flick})`); bar.addColorStop(1,`rgba(255,40,80,${0.25*flick})`);
+  ctx.shadowColor="#ff3d5e"; ctx.shadowBlur=22; ctx.fillStyle=bar; ctx.fillRect(x-w/2,y-hh+ph,w,2*(hh-ph)); ctx.shadowBlur=0;
+  // franjas de peligro que se desplazan
+  ctx.save(); ctx.beginPath(); ctx.rect(x-w/2,y-hh+ph,w,2*(hh-ph)); ctx.clip();
+  ctx.fillStyle="rgba(255,210,63,.55)"; const off=(t*60)%16;
+  for(let k=-hh-16;k<hh+16;k+=16){ ctx.beginPath(); ctx.moveTo(x-w/2,y+k+off); ctx.lineTo(x+w/2,y+k+off-8); ctx.lineTo(x+w/2,y+k+off-3); ctx.lineTo(x-w/2,y+k+off+5); ctx.fill(); }
+  // línea de escaneo
+  const sy=y-hh+ph+((t*90+it.x)%(2*(hh-ph))); ctx.fillStyle="rgba(255,255,255,.7)"; ctx.fillRect(x-w/2,sy,w,2);
+  ctx.restore();
+  // arcos eléctricos
+  ctx.strokeStyle=`rgba(255,235,240,${0.55+0.45*Math.random()})`; ctx.lineWidth=1.4; ctx.shadowColor="#ffffff"; ctx.shadowBlur=8;
+  for(let a=0;a<2;a++){ ctx.beginPath(); let py=y-hh+ph, px=x+rnd(-w/3,w/3); ctx.moveTo(px,py); while(py<y+hh-ph){ py+=rnd(6,11); px=x+rnd(-w*0.7,w*0.7); ctx.lineTo(px,Math.min(py,y+hh-ph)); } ctx.stroke(); }
+  ctx.shadowBlur=0;
+  // pilones metálicos con luz
+  for(const sgn of [-1,1]){
+    const py=y+sgn*(hh-ph/2);
+    const mg=ctx.createLinearGradient(x-12,0,x+12,0); mg.addColorStop(0,"#3a4566"); mg.addColorStop(0.5,"#c9d3ea"); mg.addColorStop(1,"#3a4566");
+    ctx.fillStyle=mg; ctx.fillRect(x-12,py-ph/2,24,ph);
+    ctx.fillStyle=(Math.floor(t*4+it.x)%2)?"#ff3d5e":"#ffd23f"; ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=10;
+    ctx.beginPath(); ctx.arc(x,py,2.6,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
+  }
+  // paredes móviles: flechas de aviso
+  if(it.zig){ ctx.fillStyle=`rgba(255,210,63,${0.6+0.4*Math.sin(t*10)})`; ctx.font="700 16px 'Chakra Petch',monospace"; ctx.textAlign="center"; ctx.fillText("⇅",x+22,y+5); }
+  ctx.restore();
+  // chispas ocasionales
+  if(Math.random()<0.12) parts.push({x:x+rnd(-4,4),y:y+rnd(-hh,hh),vx:rnd(-120,-30),vy:rnd(-60,60),life:rnd(.2,.45),max:.45,col:Math.random()<.5?"#ffd23f":"#ff6b7f",size:rnd(1.5,3)});
+}
 function drawItem(it,t){
+  if(it.type==="glitch"){ drawWall(it,t); return; }
   ctx.save(); ctx.translate(it.x,it.y+Math.sin(t*5+it.x*0.05)*4); ctx.textBaseline="alphabetic";
   if(it.type==="power"){ const pulse=1+0.12*Math.sin(t*8); ctx.scale(pulse,pulse); ctx.shadowColor="#ffffff"; ctx.shadowBlur=18; ctx.fillStyle="rgba(255,255,255,.15)"; ctx.strokeStyle="#ffffff"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,17,0,Math.PI*2); ctx.fill(); ctx.stroke(); ctx.shadowBlur=0; ctx.font="18px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText({shield:"🛡️",magnet:"🧲",turbo:"⚡"}[it.kind],0,1); }
   else if(it.type==="letter"){ ctx.rotate(Math.sin(t*4)*0.25); ctx.shadowColor="#ffb23f"; ctx.shadowBlur=16; ctx.fillStyle="#ffb23f"; ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(-14,-14,28,28,7); else ctx.rect(-14,-14,28,28); ctx.fill(); ctx.shadowBlur=0; ctx.fillStyle="#0a1229"; ctx.font="700 18px 'Chakra Petch',monospace"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(WORD[S.letterIdx],0,1); }
@@ -879,20 +920,12 @@ async function liveTop(){
   }catch(e){}
 }
 function resultPayload(nombre,area,ses,p,c,t,detalle){
-  return {id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),fecha:new Date().toISOString(),sesion:ses||"Sin sesión",participante:nombre,area:area||"-",puntaje:p,correctas:c,total:t,codigo:codeFor(nombre,area,ses,p,c,t),detalle:detalle||"-"};
+  return {letra:LETRA,fecha:new Date().toISOString(),sesion:ses||"Sin sesión",participante:nombre,area:area||"-",puntaje:p,correctas:c,total:t,codigo:codeFor(nombre,area,ses,p,c,t),detalle:detalle||"-"};
 }
 async function postWebhook(data){
-  const body=JSON.stringify(data);
-  try{
-    const r=await fetch(WEBHOOK_URL,{method:"POST",headers:{"Content-Type":"application/json"},body});
-    if(r.ok) return "ok";
-    throw new Error("HTTP "+r.status);
-  }catch(e){
-    if(!(e instanceof TypeError)) throw e;
-    // Si el navegador bloquea la respuesta (CORS), se envía igual sin poder leer la confirmación.
-    await fetch(WEBHOOK_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body});
-    return "sent";
-  }
+  // Un solo envío: el flujo lo recibe aunque el navegador no pueda leer la respuesta (evita filas duplicadas).
+  await fetch(WEBHOOK_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:JSON.stringify(data)});
+  return "sent";
 }
 async function sendResult(){
   clearInterval(topTimer);
@@ -922,7 +955,7 @@ async function loadQuestions(){
   $("hudQT").textContent=QUESTIONS.length;
   $("qSource").textContent=`${QUESTIONS.length} preguntas listas`;
 }
-$("sessionTag").textContent = SESION ? `Sesión: ${SESION}` : "";
+$("sessionTag").textContent = SESION ? `Sesión: ${SESION} (${LETRA})` : "";
 
 /* =====================================================================
    Panel del facilitador
@@ -1026,7 +1059,7 @@ $("btnTest").onclick=async()=>{
     $("saveMsg").textContent="Enviando un resultado de prueba…";
     const ses=$("inSesion").value.trim()||"Prueba";
     try{ const r=await postWebhook(resultPayload("Prueba Facilitador","TIC",ses,999,9,10,"1:1 2:0"));
-      $("saveMsg").textContent=(r==="ok"?"✓ El flujo confirmó la recepción.":"✓ Resultado de prueba enviado.")+" Revisa que aparezca la fila «Prueba Facilitador» en tu Excel (y el historial de ejecuciones del flujo)."; }
+      $("saveMsg").textContent="✓ Resultado de prueba enviado."+" Revisa que aparezca la fila «Prueba Facilitador» en tu Excel (y el historial de ejecuciones del flujo)."; }
     catch(e){ $("saveMsg").textContent="⚠️ No se pudo enviar: "+e.message; }
     return;
   }
@@ -1053,10 +1086,12 @@ $("btnNewPin").onclick=async()=>{
   $("saveMsg").innerHTML=`✓ PIN cifrado (copiado al portapapeles):<br><code style="word-break:break-all">${h}</code><br>Abre el archivo HTML con el Bloc de notas, reemplaza el valor de <b>PIN_HASH</b> por este texto, guarda y vuelve a publicar. El PIN en sí nunca queda escrito en el archivo.`;
 };
 /* ---------- Sesión y QR ---------- */
-$("inSesion").value=SESION;
+$("inSesion").value=SESION; $("inLetra").value=LETRA;
 function makeQR(){
   const base=location.href.split("?")[0].split("#")[0]; const s=$("inSesion").value.trim();
-  const url=s?base+"?sesion="+encodeURIComponent(s):base; $("shareUrl").value=url;
+  const l=($("inLetra").value||"A").toUpperCase().replace(/[^A-Z]/g,"").slice(0,2)||"A"; $("inLetra").value=l;
+  const q=[]; if(s) q.push("sesion="+encodeURIComponent(s)); q.push("l="+l);
+  const url=base+"?"+q.join("&"); $("shareUrl").value=url;
   $("qr").innerHTML=""; if(window.QRCode) new QRCode($("qr"),{text:url,width:220,height:220,correctLevel:QRCode.CorrectLevel.M});
 }
 $("btnMakeQR").onclick=makeQR;
