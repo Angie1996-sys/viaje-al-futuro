@@ -114,6 +114,19 @@ th{ color:var(--muted); font-weight:500; }
 .row{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; align-items:center; }
 .small{ font-size:13px; color:var(--muted); line-height:1.5; }
 .note{ font-size:13px; color:var(--muted); background:var(--panel2); border-left:3px solid var(--amber); padding:8px 12px; border-radius:6px; margin:8px 0; line-height:1.5; }
+.podium{ display:grid; grid-template-columns:1fr 1.15fr 1fr; gap:10px; align-items:end; margin:12px 0 16px; }
+.podium .pd{ background:var(--panel2); border-radius:12px; padding:12px; text-align:center; border:1px solid var(--line); }
+.podium .pd b{ display:block; font-family:"Chakra Petch",monospace; font-size:18px; color:var(--ink); overflow-wrap:anywhere; }
+.podium .pd span{ font-size:13px; color:var(--muted); }
+.podium .pd .m{ font-size:30px; line-height:1; display:block; margin-bottom:6px; }
+.podium .p1{ border-color:var(--amber); box-shadow:0 0 24px rgba(255,178,63,.25); padding-bottom:22px; }
+.podium .p2{ padding-bottom:14px; }
+.winner{ background:linear-gradient(90deg,rgba(255,178,63,.18),rgba(57,225,255,.08)); border:1px solid var(--amber); border-radius:12px; padding:12px 14px; font-weight:600; margin-top:10px; }
+.winner b{ color:var(--amber); font-family:"Chakra Petch",monospace; font-size:20px; }
+#liveFrameBox{ position:relative; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#fff; }
+#liveFrameBox iframe{ display:block; width:100%; height:min(70vh,640px); border:0; }
+#liveFrameBox:fullscreen iframe{ height:100vh; }
+@media (max-width:560px){ .podium{ grid-template-columns:1fr; } }
 .modal{ position:fixed; inset:0; background:rgba(6,11,28,.85); display:flex; align-items:center; justify-content:center; padding:16px; z-index:20; }
 .modal[hidden]{ display:none; }
 @media print{
@@ -228,6 +241,7 @@ th{ color:var(--muted); font-weight:500; }
     <div class="tabs noprint">
       <button class="tab on" data-tab="tPreg">Preguntas</button>
       <button class="tab" data-tab="tQR">Sesión y QR</button>
+      <button class="tab" data-tab="tLive">🔴 Resultados en vivo</button>
       <button class="tab" data-tab="tInf">Informe de resultados</button>
       <button class="tab" data-tab="tSalir" id="btnLogout">Cerrar panel</button>
     </div>
@@ -276,6 +290,19 @@ th{ color:var(--muted); font-weight:500; }
       </div>
     </div>
 
+    <div class="tabc" id="tLive" hidden>
+      <h3>Resultados en vivo</h3>
+      <p class="small" id="liveHelp">Esta es la hoja <b>Ranking</b> de tu Excel, que se llena sola a medida que los participantes terminan. Elige la sesión en la celda <b>B1</b> del Excel: verás el ganador, el podio y todos los resultados de esa sesión.</p>
+      <div class="row noprint" style="margin-top:0">
+        <button class="btn sm" id="btnLiveReload">↻ Actualizar ahora</button>
+        <label class="small" style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" id="chkLiveAuto" style="width:auto" checked> Actualizar cada 20 s</label>
+        <button class="btn ghost sm" id="btnLiveFull">⛶ Pantalla completa</button>
+        <a class="btn ghost sm" id="btnLiveOpen" target="_blank" rel="noopener" style="text-decoration:none" hidden>Abrir Excel para elegir la sesión</a>
+      </div>
+      <p class="small" id="liveStamp"></p>
+      <div id="liveFrameBox"></div>
+    </div>
+
     <div class="tabc" id="tInf" hidden>
       <div class="row noprint" style="margin-top:0">
         <label for="selSesion" style="margin:0">Sesión:</label>
@@ -289,6 +316,8 @@ th{ color:var(--muted); font-weight:500; }
         <h3 id="repTitle" style="margin-top:14px">Informe de resultados</h3>
         <p class="small" id="repInfo"></p>
         <p class="small noprint" id="liveTag" style="color:var(--pink);font-weight:600"></p>
+        <div id="repWinner"></div>
+        <div class="podium" id="repPodium"></div>
         <div class="kpis" id="repKpis"></div>
         <h3>Puestos</h3>
         <p class="small">Se toma el mejor intento de cada participante. Desempeño: 🟢 Destacado (80% o más de aciertos) · 🟡 Aprobado (60–79%) · 🔴 Por reforzar (menos de 60%).</p>
@@ -329,6 +358,9 @@ const WEBHOOK_URL = "https://default83447055f5c742a29fb7faad727f2f.b4.environmen
 const FORMS_URL = "";
 // Enlace del libro de Excel (en la web) que recibe las respuestas del formulario y tiene la hoja «Ranking».
 // Se abre desde el panel del facilitador para ver los resultados en tiempo real.
+// Código o dirección para INSERTAR la hoja Ranking en el panel (Excel en la web → Archivo → Compartir → Insertar).
+// Puedes pegar el código <iframe ...> completo entre las comillas invertidas ` `.
+const RANKING_EMBED = ``;
 const RANKING_URL = "https://annardiagnosticaimports-my.sharepoint.com/:x:/g/personal/angie_perez_annardx_com/IQAT8zPcZA9jQ76OYSjS1vgbAQJZmPtx2ZE0A2rwRP1iNsw?e=er4ORO";
 // MODO OPCIONAL (requiere aprobación del administrador; déjalo vacío si no la tienes). Con CLIENT_ID y TENANT_ID llenos, cada participante
 // inicia sesión con su cuenta corporativa y su resultado se guarda al instante en una lista de SharePoint.
@@ -999,7 +1031,8 @@ function togglePanel(show){ $("facilPanel").hidden=!show; if(show) $("facilPanel
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
   if(b.dataset.tab==="tSalir"){ togglePanel(false); return; }
   document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x===b));
-  ["tPreg","tQR","tInf"].forEach(id=>$(id).hidden=id!==b.dataset.tab);
+  ["tPreg","tQR","tLive","tInf"].forEach(id=>$(id).hidden=id!==b.dataset.tab);
+  if(b.dataset.tab==="tLive") startLive(); else stopLive();
   if(b.dataset.tab==="tInf") loadReport(); if(b.dataset.tab==="tQR") makeQR();
 });
 
@@ -1118,6 +1151,7 @@ async function liveReport(){
 function startLiveReport(){ clearInterval(liveTimer); if(!(LIVE && me)) return; liveReport(); liveTimer=setInterval(()=>{ if($("tInf").hidden||$("facilPanel").hidden) clearInterval(liveTimer); else liveReport(); },5000); }
 function loadReport(fromLive){
   if(LIVE && me && !fromLive){ startLiveReport(); return; }
+  $("repWinner").innerHTML=""; $("repPodium").innerHTML="";
   if(!allRows.length && LIVE && !me){ $("repInfo").innerHTML="Para ver el informe en vivo, inicia sesión con Microsoft en la pantalla de inicio del juego."; $("repRows").innerHTML=""; $("repQRows").innerHTML=""; $("repKpis").innerHTML=""; return; }
   if(!allRows.length){ $("repInfo").innerHTML=(RANKING_URL?"Durante la sesión, pulsa <b>📊 Ranking en vivo (Excel)</b> para ver los resultados en tiempo real. ":"")+"Para el informe completo, descarga el libro de Excel de las respuestas y cárgalo con <b>📂 Cargar Excel</b>."; $("repRows").innerHTML=""; $("repQRows").innerHTML=""; $("repKpis").innerHTML=""; $("selSesion").innerHTML=`<option value="">Todas las sesiones</option>`; return; }
   const ses=[...new Set(allRows.map(r=>String(r.sesion||"")).filter(Boolean))];
@@ -1159,6 +1193,11 @@ function buildReport(){
   const qs={}; for(const r of rows){ const d=decodeDetail(r.detalle); for(const x of d){ qs[x.q]=qs[x.q]||{q:x.q,n:0,ok:0}; qs[x.q].n++; qs[x.q].ok+=Number(x.ok)||0; } }
   const qlist=Object.values(qs).map(x=>({...x,pct:Math.round(x.ok/x.n*100)})).sort((a,b)=>a.pct-b.pct);
   rep={rank,qs:qlist,sesion:s||"Todas las sesiones"};
+  const top=rank.filter(r=>r.puesto<=3);
+  const card=(r,cls,m)=>r?`<div class="pd ${cls}"><span class="m">${m}</span><b>${esc(r.nombre)}</b><span>${esc(r.area||"")} · ${r.puntaje} pts · ${r.correctas}/${r.total}</span></div>`:`<div class="pd ${cls}"><span class="m">${m}</span><span>Sin participante</span></div>`;
+  const firsts=rank.filter(r=>r.puesto===1);
+  $("repWinner").innerHTML=rank.length?`<div class="winner">🏆 ${firsts.length>1?"Empate en el primer puesto":"Ganador"}${s?" de "+esc(s):""}: <b>${firsts.map(r=>esc(r.nombre)).join(" y ")}</b> con ${firsts[0].puntaje} puntos</div>`:"";
+  $("repPodium").innerHTML=rank.length?card(rank[1]&&rank[1].puesto<=3?rank[1]:null,"p2","🥈")+card(rank[0],"p1","🥇")+card(rank[2]&&rank[2].puesto<=3?rank[2]:null,"p3","🥉"):"";
   const n=rank.length, avg=n?Math.round(rank.reduce((a,r)=>a+r.puntaje,0)/n):0, avgPct=n?Math.round(rank.reduce((a,r)=>a+r.pct,0)/n):0;
   const cnt=c=>rank.filter(r=>r.nivel.c===c).length;
   $("repTitle").textContent=`Informe de resultados · ${rep.sesion}`;
@@ -1185,7 +1224,28 @@ $("btnXlsx").onclick=()=>{
   XLSX.writeFile(wb,`Informe_Viaje_al_Futuro_${rep.sesion.replace(/[^\w-]+/g,"_")}.xlsx`);
 };
 
-if(RANKING_URL){ $("btnRanking").href=RANKING_URL; $("btnRanking").hidden=false; }
+if(RANKING_URL){ $("btnRanking").href=RANKING_URL; $("btnRanking").hidden=false; $("btnLiveOpen").href=RANKING_URL; $("btnLiveOpen").hidden=false; }
+/* ---------- Resultados en vivo: hoja Ranking del Excel incrustada ---------- */
+function embedSrc(){
+  const raw=String(RANKING_EMBED||"").trim(); if(!raw) return "";
+  const m=raw.match(/src\s*=\s*["']([^"']+)["']/i); let u=(m?m[1]:raw).replace(/&amp;/g,"&");
+  if(!/^https:\/\//i.test(u)) return "";
+  if(!/action=embedview/i.test(u)) u+=(u.includes("?")?"&":"?")+"action=embedview";
+  return u;
+}
+let liveTimer2=null;
+function loadLiveFrame(){
+  const box=$("liveFrameBox"), src=embedSrc();
+  if(!src){ box.style.background="var(--panel2)"; box.innerHTML='<p class="small" style="padding:14px;margin:0">Aún no has configurado la hoja incrustada. En Excel en la web abre <b>Archivo → Compartir → Insertar</b>, copia el código y pégalo en <b>RANKING_EMBED</b> (ver guía). Mientras tanto, usa el botón <b>Abrir Excel</b>.</p>'; $("liveStamp").textContent=""; return; }
+  const sep=src.includes("?")?"&":"?";
+  box.innerHTML=`<iframe title="Ranking en vivo" src="${src}${sep}t=${Date.now()}" allowfullscreen></iframe>`;
+  $("liveStamp").textContent="Última actualización: "+new Date().toLocaleTimeString("es-CO");
+}
+function startLive(){ loadLiveFrame(); clearInterval(liveTimer2); if($("chkLiveAuto").checked && embedSrc()) liveTimer2=setInterval(()=>{ if($("tLive").hidden||$("facilPanel").hidden){ stopLive(); return; } loadLiveFrame(); },20000); }
+function stopLive(){ clearInterval(liveTimer2); liveTimer2=null; }
+$("btnLiveReload").onclick=loadLiveFrame;
+$("chkLiveAuto").onchange=startLive;
+$("btnLiveFull").onclick=()=>{ const b=$("liveFrameBox"); if(b.requestFullscreen) b.requestFullscreen().catch(()=>{}); };
 loadQuestions().then(liveInit);
 </script>
 </body>
